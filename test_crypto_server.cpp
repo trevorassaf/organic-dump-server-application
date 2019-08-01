@@ -20,6 +20,7 @@
 DEFINE_int32(port, -1, "Port");
 DEFINE_string(cert, "", "Certificate file");
 DEFINE_string(key, "", "Private key file");
+DEFINE_string(client_ca, "", "Client CA");
 DEFINE_string(message, "Default client message", "Message to send client");
 
 namespace
@@ -100,7 +101,8 @@ bool RunServer(SSL_CTX *ctx, int serverFd, const char *message)
         }
 
         char peerIpv4String[INET_ADDRSTRLEN];
-        LOG(ERROR) << "Accepted connection from " << inet_ntop(AF_INET, &(connectionAddr.sin_addr), peerIpv4String, INET_ADDRSTRLEN);
+        LOG(ERROR) << "Accepted connection from "
+                   << inet_ntop(AF_INET, &(connectionAddr.sin_addr), peerIpv4String, INET_ADDRSTRLEN);
 
         ssl = SSL_new(ctx);
 
@@ -181,18 +183,21 @@ bool LoadCertificate(SSL_CTX *ctx, const char *certFile, const char *keyFile)
     assert(certFile);
     assert(keyFile);
 
-    if (SSL_CTX_use_certificate_file(ctx, certFile, SSL_FILETYPE_PEM) <= 0)
+    // Load server cert
+    if (SSL_CTX_use_certificate_file(ctx, certFile, SSL_FILETYPE_PEM) != 1)
     {
         LOG(ERROR) << "Failed to load certificate: " << certFile;
         return false;
     }
 
-    if (SSL_CTX_use_PrivateKey_file(ctx, keyFile, SSL_FILETYPE_PEM) <= 0)
+    // Load server private key
+    if (SSL_CTX_use_PrivateKey_file(ctx, keyFile, SSL_FILETYPE_PEM) != 1)
     {
         LOG(ERROR) << "Failed to load private key: " << keyFile;
         return false;
     }
 
+    // Ensure cert and private key agree with one another
     if (!SSL_CTX_check_private_key(ctx))
     {
         LOG(ERROR) << "Private key does not match public key";
@@ -217,6 +222,23 @@ bool InitSslCtx(SSL_CTX **outCtx)
     }
 
     return true;
+}
+
+void RequireMutualAuth(SSL_CTX *ctx, const char *clientCaFile)
+{
+    assert(ctx);
+
+    // Require mutual authentication. Only accept peer certs signed by CA directly.
+    SSL_CTX_set_verify(
+        ctx,
+        SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+        nullptr);
+
+    // Load CA for client cert. We will verify that the client's cert is signed by this CA.
+    SSL_CTX_set_client_CA_list(ctx, SSL_load_client_CA_file(clientCaFile));
+
+    // Accept only certs signed by CA itself. No cert chaining.
+    SSL_CTX_set_verify_depth(ctx, 1);
 }
 } // namespace
 
@@ -243,6 +265,8 @@ int main(int argc, char **argv)
       LOG(ERROR) << "Failed to load cert";
       goto error;
   }
+
+  RequireMutualAuth(ctx, FLAGS_client_ca.c_str());
 
   if (!OpenListeningSocket(ctx, static_cast<uint16_t>(FLAGS_port), &serverFd))
   {
