@@ -20,7 +20,7 @@
 DEFINE_int32(port, -1, "Port");
 DEFINE_string(cert, "", "Certificate file");
 DEFINE_string(key, "", "Private key file");
-DEFINE_string(client_ca, "", "Client CA");
+DEFINE_string(ca, "", "CA file");
 DEFINE_string(message, "Default client message", "Message to send client");
 
 namespace
@@ -82,6 +82,8 @@ bool RunServer(SSL_CTX *ctx, int serverFd, const char *message)
 {
     assert(ctx);
 
+    LOG(INFO) << "Starting run server";
+
     while (true)
     {
         struct sockaddr_in connectionAddr;
@@ -121,14 +123,21 @@ bool RunServer(SSL_CTX *ctx, int serverFd, const char *message)
             goto finished;
         }
 
-        //PrintPeerCert(ssl);
+        LOG(INFO) << "Server succeeded in accepting connection";
+
+        /*
+        PrintPeerCert(ssl);
+
+        LOG(INFO) << "Server succeeded in printing peer cert";
+        */
 
         if (!DoPeerConversation(ssl, message))
         {
             LOG(ERROR) << "Failed to conduct conversation with peer";
             goto finished;
-
         }
+
+        LOG(INFO) << "Server succeeded in performing peer conversation";
 
         LOG(INFO) << "Finished conversation with client";
         goto finished;
@@ -177,16 +186,25 @@ bool OpenListeningSocket(SSL_CTX *ctx, uint16_t port, uint32_t *outServerFd)
     return true;
 }
 
-bool LoadCertificate(SSL_CTX *ctx, const char *certFile, const char *keyFile)
+bool LoadCertificate(SSL_CTX *ctx, const char *certFile, const char *keyFile, const char *caFile)
 {
     assert(ctx);
     assert(certFile);
     assert(keyFile);
 
+    // Load CA cert
+    if (SSL_CTX_load_verify_locations(ctx, caFile, nullptr) != 1)
+    {
+        LOG(ERROR) << "Failed to load verify locations for ca cert: " << caFile;
+        return false;
+    }
+
+    SSL_CTX_set_client_CA_list(ctx, SSL_load_client_CA_file(caFile));
+
     // Load server cert
     if (SSL_CTX_use_certificate_file(ctx, certFile, SSL_FILETYPE_PEM) != 1)
     {
-        LOG(ERROR) << "Failed to load certificate: " << certFile;
+        LOG(ERROR) << "Failed to use certificate file: " << certFile;
         return false;
     }
 
@@ -198,11 +216,20 @@ bool LoadCertificate(SSL_CTX *ctx, const char *certFile, const char *keyFile)
     }
 
     // Ensure cert and private key agree with one another
-    if (!SSL_CTX_check_private_key(ctx))
+    if (SSL_CTX_check_private_key(ctx) != 1)
     {
         LOG(ERROR) << "Private key does not match public key";
         return false;
     }
+
+    // Require mutual authentication. Only accept peer certs signed by CA directly.
+    SSL_CTX_set_verify(
+        ctx,
+        SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+        nullptr);
+
+    // Accept only certs signed by CA itself. No cert chaining.
+    SSL_CTX_set_verify_depth(ctx, 1);
 
     return true;
 }
@@ -224,8 +251,9 @@ bool InitSslCtx(SSL_CTX **outCtx)
     return true;
 }
 
-void RequireMutualAuth(SSL_CTX *ctx, const char *clientCaFile)
+void RequireMutualAuth(SSL_CTX *ctx, const char *ca_file)
 {
+  /*
     assert(ctx);
 
     // Require mutual authentication. Only accept peer certs signed by CA directly.
@@ -235,10 +263,12 @@ void RequireMutualAuth(SSL_CTX *ctx, const char *clientCaFile)
         nullptr);
 
     // Load CA for client cert. We will verify that the client's cert is signed by this CA.
-    SSL_CTX_set_client_CA_list(ctx, SSL_load_client_CA_file(clientCaFile));
+    SSL_CTX_set_client_CA_list(ctx, SSL_load_client_CA_file(ca_file));
 
     // Accept only certs signed by CA itself. No cert chaining.
     SSL_CTX_set_verify_depth(ctx, 1);
+
+    */
 }
 } // namespace
 
@@ -260,13 +290,13 @@ int main(int argc, char **argv)
       goto error;
   }
 
-  if (!LoadCertificate(ctx, FLAGS_cert.c_str(), FLAGS_key.c_str()))
+  if (!LoadCertificate(ctx, FLAGS_cert.c_str(), FLAGS_key.c_str(), FLAGS_ca.c_str()))
   {
       LOG(ERROR) << "Failed to load cert";
       goto error;
   }
 
-  RequireMutualAuth(ctx, FLAGS_client_ca.c_str());
+  RequireMutualAuth(ctx, FLAGS_ca.c_str());
 
   if (!OpenListeningSocket(ctx, static_cast<uint16_t>(FLAGS_port), &serverFd))
   {
