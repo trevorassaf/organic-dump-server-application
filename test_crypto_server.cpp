@@ -27,11 +27,19 @@ using network::TlsConnection;
 int main(int argc, char **argv)
 {
   google::ParseCommandLineFlags(&argc, &argv, false);
+  FLAGS_logtostderr = 1;
   google::InitGoogleLogging(argv[0]);
+
+  LOG(INFO) << "Port: " << FLAGS_port;
+  LOG(INFO) << "Cert: " << FLAGS_cert;
+  LOG(INFO) << "Key: " << FLAGS_key;
+  LOG(INFO) << "Ca: " << FLAGS_ca;
+  LOG(INFO) << "Message: " << FLAGS_message;
 
   SSL_library_init();
   OpenSSL_add_all_algorithms();
   SSL_load_error_strings();
+  ERR_load_BIO_strings();
 
   TlsServer server;
   TlsServerFactory server_factory;
@@ -46,12 +54,16 @@ int main(int argc, char **argv)
       return EXIT_FAILURE;
   }
 
+  LOG(INFO) << "After server_factory.Create()";
+
   TlsConnection cxn;
   if (!server.Accept(&cxn))
   {
       LOG(ERROR) << "Failed to accept TlsServer connection";
       return EXIT_FAILURE;
   }
+
+  LOG(INFO) << "After server.Accept()";
 
   uint8_t read_buffer[256];
   std::string client_message;
