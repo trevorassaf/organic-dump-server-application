@@ -11,6 +11,8 @@
 #include <TlsConnection.h>
 #include <TlsUtilities.h>
 
+#include <test.pb.h>
+
 namespace
 {
 DEFINE_int32(port, -1, "Port");
@@ -22,6 +24,7 @@ DEFINE_string(message, "Default client message", "Message to send client");
 using network::TlsServer;
 using network::TlsServerFactory;
 using network::TlsConnection;
+using network::ProtobufMessageHeader;
 } // anonymous namespace
 
 int main(int argc, char **argv)
@@ -65,26 +68,44 @@ int main(int argc, char **argv)
 
   LOG(INFO) << "After server.Accept()";
 
-  uint8_t read_buffer[256];
-  std::string client_message;
-  if (!ReadTlsMessage(
-        &cxn,
-        read_buffer,
-        sizeof(read_buffer),
-        &client_message))
+  ProtobufMessageHeader header;
+  if (!ReadTlsProtobufMessageHeader(&cxn, &header))
   {
-      LOG(ERROR) << "Failed to read TLS message from client";
+      LOG(ERROR) << "Failed to read TLS protobuf header";
       return EXIT_FAILURE;
   }
 
-  LOG(INFO) << "Message from TLS client: " << client_message;
+  test_message::BasicStringMsg msg;
+  auto buffer = std::make_unique<uint8_t[]>(header.size);
 
-  if (!SendTlsMessage(&cxn, FLAGS_message))
+  if (!ReadTlsProtobufMessageBody(
+          &cxn,
+          buffer.get(),
+          header.size,
+          &msg)) 
   {
-      LOG(ERROR) << "Failed to send message to TLS client: " << FLAGS_message;
+      LOG(ERROR) << "Failed to read TLS protobuf message body";
+      return EXIT_FAILURE;
+  }
+
+  LOG(INFO) << "Message from client: " << msg.str();
+
+  test_message::MessageType basic_str_type = test_message::MessageType::BASIC_STRING;
+  test_message::BasicStringMsg basic_str;
+  basic_str.set_str(FLAGS_message);
+
+  bool cxn_closed = false;
+  if (!SendTlsProtobufMessage(
+          &cxn,
+          static_cast<uint8_t>(basic_str_type),
+          &basic_str,
+          &cxn_closed))
+  {
+      LOG(ERROR) << "Failed to send TLS protobuf message";
       return EXIT_FAILURE;
   }
 
   LOG(INFO) << "Sent message to TLS client";
+
   return EXIT_SUCCESS;
 }
