@@ -4,6 +4,7 @@ include_directories(
   ../../organic-dump-network/repo
   ../../organic-dump-protocols/repo
   ../../../external/protobuf/repo/src
+  ../../../external/boringssl/repo/include
 )
 
 add_executable(test_crypto_server test_crypto_server.cpp)
