@@ -13,44 +13,51 @@
 
 #include <test.pb.h>
 
+#include "src/cli_config.h"
+
 namespace
 {
-DEFINE_int32(port, -1, "Port");
-DEFINE_string(cert, "", "Certificate file");
-DEFINE_string(key, "", "Private key file");
-DEFINE_string(ca, "", "CA file");
-DEFINE_string(message, "Default client message", "Message to send client");
-
 using network::TlsServer;
 using network::TlsServerFactory;
 using network::TlsConnection;
 using network::ProtobufMessageHeader;
-} // anonymous namespace
+using server::CliConfig;
 
-int main(int argc, char **argv)
+void InitLibraries(const char *app_name)
 {
-  google::ParseCommandLineFlags(&argc, &argv, false);
-  FLAGS_logtostderr = 1;
-  google::InitGoogleLogging(argv[0]);
-
-  LOG(INFO) << "Port: " << FLAGS_port;
-  LOG(INFO) << "Cert: " << FLAGS_cert;
-  LOG(INFO) << "Key: " << FLAGS_key;
-  LOG(INFO) << "Ca: " << FLAGS_ca;
-  LOG(INFO) << "Message: " << FLAGS_message;
+  google::InitGoogleLogging(app_name);
 
   SSL_library_init();
   OpenSSL_add_all_algorithms();
   SSL_load_error_strings();
   ERR_load_BIO_strings();
+}
+
+} // anonymous namespace
+
+int main(int argc, char **argv)
+{
+  CliConfig config;
+  if (!CliConfig::Parse(argc, argv, &config))
+  {
+      LOG(ERROR) << "Failed to parse CLI flags";
+      return EXIT_FAILURE;
+  }
+
+  InitLibraries(argv[0]);
+
+  LOG(INFO) << "Port: " << config.GetPort();
+  LOG(INFO) << "Cert: " << config.GetCertFile();
+  LOG(INFO) << "Key: " << config.GetKeyFile();
+  LOG(INFO) << "Ca: " << config.GetCaFile();
 
   TlsServer server;
   TlsServerFactory server_factory;
   if (!server_factory.Create(
-        FLAGS_cert,
-        FLAGS_key,
-        FLAGS_ca,
-        FLAGS_port,
+        config.GetCertFile(),
+        config.GetKeyFile(),
+        config.GetCaFile(),
+        config.GetPort(),
         &server))
   {
       LOG(ERROR) << "Failed to create server";
@@ -92,7 +99,7 @@ int main(int argc, char **argv)
 
   test_message::MessageType basic_str_type = test_message::MessageType::BASIC_STRING;
   test_message::BasicStringMsg basic_str;
-  basic_str.set_str(FLAGS_message);
+  //basic_str.set_str(FLAGS_message);
 
   bool cxn_closed = false;
   if (!SendTlsProtobufMessage(
