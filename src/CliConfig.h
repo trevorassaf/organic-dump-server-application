@@ -1,12 +1,12 @@
-#ifndef SERVER_CLICONFIG_H
-#define SERVER_CLICONFIG_H
+#ifndef ORGANICDUMP_CLICONFIG_H
+#define ORGANICDUMP_CLICONFIG_H
 
 #include <cstdint>
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
-namespace server
+namespace organicdump
 {
 
 class CliConfig
@@ -34,6 +34,6 @@ private:
   std::string ca_file_;
 };
 
-}; // namespace server
+}; // namespace organicdump
 
-#endif // SERVER_CLICONFIG_H
+#endif // ORGANICDUMP_CLICONFIG_H

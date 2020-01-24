@@ -6,6 +6,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <NetworkUtilities.h>
 #include <TlsServerFactory.h>
 #include <TlsServer.h>
 #include <TlsConnection.h>
@@ -13,7 +14,7 @@
 
 #include <test.pb.h>
 
-#include "src/cli_config.h"
+#include "src/CliConfig.h"
 
 namespace
 {
@@ -21,7 +22,7 @@ using network::TlsServer;
 using network::TlsServerFactory;
 using network::TlsConnection;
 using network::ProtobufMessageHeader;
-using server::CliConfig;
+using organicdump::CliConfig;
 
 void InitLibraries(const char *app_name)
 {
@@ -58,6 +59,7 @@ int main(int argc, char **argv)
         config.GetKeyFile(),
         config.GetCaFile(),
         config.GetPort(),
+        network::WaitPolicy::NON_BLOCKING,
         &server))
   {
       LOG(ERROR) << "Failed to create server";
@@ -113,6 +115,5 @@ int main(int argc, char **argv)
   }
 
   LOG(INFO) << "Sent message to TLS client";
-
   return EXIT_SUCCESS;
 }

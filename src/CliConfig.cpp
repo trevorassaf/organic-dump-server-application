@@ -1,4 +1,4 @@
-#include "cli_config.h"
+#include "CliConfig.h"
 
 #include <fstream>
 #include <utility>
@@ -42,7 +42,7 @@ DEFINE_validator(key, CheckFileExists);
 DEFINE_validator(ca, CheckFileExists);
 } // namespace
 
-namespace server
+namespace organicdump
 {
 
 bool CliConfig::Parse(int argc, char **argv, CliConfig *out_config)
@@ -91,5 +91,5 @@ const std::string& CliConfig::GetCaFile() const
     return ca_file_;
 }
 
-}; // namespace server
+}; // namespace organicdump
 

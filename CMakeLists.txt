@@ -16,9 +16,16 @@ target_link_libraries(test_crypto_server ssl crypto)
 target_link_libraries(test_crypto_server organic_dump_network)
 target_link_libraries(test_crypto_server test_proto)
 
-add_executable(organic_dump_server src/main.cpp src/cli_config.cpp)
+add_executable(organic_dump_server
+  src/main.cpp
+  src/CliConfig.cpp
+  src/ProtobufClient.cpp
+  src/Server.cpp
+  src/UndifferentiatedClientHandler.cpp)
+
 target_link_libraries(organic_dump_server gflags::gflags)
 target_link_libraries(organic_dump_server glog::glog)
 target_link_libraries(organic_dump_server ssl crypto)
 target_link_libraries(organic_dump_server organic_dump_network)
+target_link_libraries(organic_dump_server organic_dump_proto)
 target_link_libraries(organic_dump_server test_proto)

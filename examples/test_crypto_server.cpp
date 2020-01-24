@@ -6,6 +6,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <NetworkUtilities.h>
 #include <TlsServerFactory.h>
 #include <TlsServer.h>
 #include <TlsConnection.h>
@@ -51,6 +52,7 @@ int main(int argc, char **argv)
         FLAGS_key,
         FLAGS_ca,
         FLAGS_port,
+        network::WaitPolicy::NON_BLOCKING,
         &server))
   {
       LOG(ERROR) << "Failed to create server";
