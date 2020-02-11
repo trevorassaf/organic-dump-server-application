@@ -22,8 +22,9 @@ using network::TlsServerFactory;
 using organicdump_proto::ClientType;
 using organicdump_proto::MessageType;
 
-constexpr size_t kTimeoutSecs = 0;
-constexpr size_t kTimeoutUsecs = 0;
+//constexpr size_t kTimeoutSecs = 0;
+//constexpr size_t kTimeoutUsecs = 0;
+
 } // namespace
 
 namespace organicdump
@@ -86,12 +87,15 @@ bool Server::Run()
 
   while (true)
   {
+    /*
      struct timeval timeout;
      timeout.tv_sec = kTimeoutSecs;
      timeout.tv_usec = kTimeoutUsecs;
+     */
 
      fd_set read_fds;
-     int max_fd = 0;
+     int max_fd = tls_server_.GetFd().Get();
+     FD_SET(max_fd, &read_fds);
 
      for (auto &entry : clients_)
      {
@@ -100,6 +104,7 @@ bool Server::Run()
          max_fd = entry.first;
        }
 
+       LOG(ERROR) << "bozkurtus -- Adding fd to select FD_SET: " << entry.first;
        FD_SET(entry.first, &read_fds);
      }
 
@@ -110,7 +115,7 @@ bool Server::Run()
          &read_fds,
          nullptr,
          nullptr,
-         &timeout);
+         nullptr);
 
      switch (result)
      {
@@ -120,8 +125,7 @@ bool Server::Run()
          return false;
 
       case 0:
-         LOG(INFO) << "Select timeout expired: " << kTimeoutSecs << "s, "
-                    << kTimeoutUsecs << "u";
+         LOG(INFO) << "Select timeout expired";
          break;
 
       default:

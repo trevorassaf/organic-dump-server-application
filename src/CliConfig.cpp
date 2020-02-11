@@ -1,6 +1,7 @@
 #include "CliConfig.h"
 
 #include <fstream>
+#include <iostream>
 #include <utility>
 
 #include <gflags/gflags.h>
@@ -47,6 +48,9 @@ namespace organicdump
 
 bool CliConfig::Parse(int argc, char **argv, CliConfig *out_config)
 {
+
+  std::cout << "bozkutus -- CliConfig::Parse() -- call" << std::endl;
+
   // Force glog to write to stderr
   FLAGS_logtostderr = 1;
   google::ParseCommandLineFlags(&argc, &argv, false);

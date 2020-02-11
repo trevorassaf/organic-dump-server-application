@@ -42,4 +42,4 @@ bool UndifferentiatedClientHandler::Handle(
   return true;
 }
 
-}; // namespace organicdump
+} // namespace organicdump
