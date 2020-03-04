@@ -32,9 +32,22 @@ public:
 private:
   void CloseResources();
   void StealResources(ControlClientHandler *other);
-  bool RegisterClient(const organicdump_proto::RegisterClient &msg);
-  bool RegisterSoilMoistureSensor(const organicdump_proto::RegisterSoilMoistureSensor &msg);
-  bool UpdatePeripheralOwnership(const organicdump_proto::UpdatePeripheralOwnership &msg);
+  bool RegisterRpi(
+      const organicdump_proto::RegisterRpi &msg,
+      ProtobufClient *client);
+  bool RegisterSoilMoistureSensor(
+      const organicdump_proto::RegisterSoilMoistureSensor &msg,
+      ProtobufClient *client);
+  bool UpdatePeripheralOwnership(
+      const organicdump_proto::UpdatePeripheralOwnership &msg,
+      ProtobufClient *client);
+
+private:
+  bool SendSuccessfulBasicResponse(size_t id, ProtobufClient *client);
+  bool SendFailedBasicResponse(
+      organicdump_proto::ErrorCode code,
+      const std::string& message,
+      ProtobufClient *client);
 
 private:
   ControlClientHandler(const ControlClientHandler &other);

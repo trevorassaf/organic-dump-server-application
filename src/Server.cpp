@@ -8,7 +8,10 @@
 
 #include <cstdint>
 
+#include <glog/logging.h>
+
 #include "ClientHandler.h"
+#include "ControlClientHandler.h"
 #include "NetworkUtilities.h"
 #include "TlsConnection.h"
 #include "TlsServer.h"
@@ -22,9 +25,6 @@ using network::TlsServerFactory;
 using organicdump_proto::ClientType;
 using organicdump_proto::MessageType;
 
-//constexpr size_t kTimeoutSecs = 0;
-//constexpr size_t kTimeoutUsecs = 0;
-
 } // namespace
 
 namespace organicdump
@@ -37,21 +37,46 @@ bool Server::Create(
   std::string ca_file,
   Server *out_server)
 {
+  LOG(ERROR) << "bozkurtus -- Server::Create() -- call";
+
   TlsServer tls_server;
   TlsServerFactory server_factory;
   if (!server_factory.Create(
+        port,
         cert_file,
         key_file,
         ca_file,
-        port,
-        network::WaitPolicy::NON_BLOCKING,
+        network::WaitPolicy::BLOCKING,
         &tls_server))
   {
     LOG(ERROR) << "Failed to create server factory";
     return false;
   }
 
-  *out_server = Server{std::move(tls_server)};
+  LOG(ERROR) << "bozkurtus -- Server::Create() -- before ControlClientHandler Create()";
+
+  ControlClientHandler control_handler;
+  if (!ControlClientHandler::Create(&control_handler))
+  {
+    LOG(ERROR) << "Failed to create control client handler";
+    return false;
+  }
+
+  LOG(ERROR) << "bozkurtus -- Server::Create() -- after ControlClientHandler Create()";
+
+  std::unordered_map<organicdump_proto::ClientType,
+                     std::unique_ptr<ClientHandler>> handlers;
+  handlers[ClientType::CONTROL] =
+      std::make_unique<ControlClientHandler>(std::move(control_handler));
+
+  LOG(ERROR) << "bozkurtus -- Server::Create() -- after CONTROL entry";
+
+  handlers[ClientType::UNKNOWN] =
+      std::make_unique<UndifferentiatedClientHandler>();
+
+  LOG(ERROR) << "bozkurtus -- Server::Create() -- after UNDIF entry";
+
+  *out_server = Server{std::move(tls_server), std::move(handlers)};
   return true;
 }
 
@@ -71,13 +96,14 @@ Server &Server::operator=(Server &&other)
 
 Server::Server() {}
 
-Server::Server(TlsServer tls_server)
+Server::Server(
+    TlsServer tls_server,
+    std::unordered_map<organicdump_proto::ClientType,
+                       std::unique_ptr<ClientHandler>> handlers)
   : tls_server_{std::move(tls_server)},
     clients_{},
-    handlers_{}
-{
-    InitHandlers();
-}
+    handlers_{std::move(handlers)}
+{}
 
 Server::~Server() {}
 
@@ -85,20 +111,25 @@ bool Server::Run()
 {
   LOG(INFO) << "Starting organic dump server...";
 
+LOG(ERROR) << "bozkurtus -- Server::Run() -- call";
   while (true)
   {
-    /*
-     struct timeval timeout;
-     timeout.tv_sec = kTimeoutSecs;
-     timeout.tv_usec = kTimeoutUsecs;
-     */
+
+LOG(ERROR) << "bozkurtus -- Server::Run() -- while loop top";
 
      fd_set read_fds;
+     FD_ZERO(&read_fds);
+
      int max_fd = tls_server_.GetFd().Get();
      FD_SET(max_fd, &read_fds);
 
+     LOG(ERROR) << "bozkurtus -- Server::Run() -- server fd: " << max_fd;
+
      for (auto &entry : clients_)
      {
+
+     LOG(ERROR) << "bozkurtus -- Server::Run() -- client fd: " << entry.first;
+
        if (entry.first > max_fd)
        {
          max_fd = entry.first;
@@ -110,6 +141,7 @@ bool Server::Run()
 
      LOG(INFO) << "Entering select()...";
 
+LOG(ERROR) << "bozkurtus -- Server::Run() -- before select()";
      int result = select(
          max_fd + 1,
          &read_fds,
@@ -135,6 +167,7 @@ bool Server::Run()
            KickAllClients();
            return false;
          }
+LOG(ERROR) << "bozkurtus -- Server::Run() -- after ProcessReadableSockets() successful";
 
          LOG(INFO) << "Processed all readable sockets successfully";
          break;
@@ -142,22 +175,6 @@ bool Server::Run()
   }
 
   return true;
-}
-
-void Server::InitHandlers()
-{
-  assert(handlers_.empty());
-
-  handlers_[ClientType::UNDIFFERENTIATED] =
-      std::make_unique<UndifferentiatedClientHandler>();
-  /*
-  handlers_.emplace_back(
-      organicdump_proto::ClientType::CONTROL,
-      std::make_unique<ControlHandler>());
-  handlers_.emplace_back(
-      organicdump_proto::ClientType::RPI,
-      std::make_unique<RpiHandler>());
-      */
 }
 
 void Server::KickAllClients()
@@ -169,6 +186,8 @@ void Server::KickAllClients()
 
 bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
 {
+  LOG(ERROR) << "bozkurtus -- Server::ProcessReadableSockets() -- call";
+
   assert(readable_fds);
 
   // First, check whether it's a new connection
@@ -181,13 +200,13 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
     {
         LOG(INFO) << "Accepted new connection. Creating undifferented protobuf client";
         assert(clients_.count(cxn.GetFd().Get()) == 0);
-        clients_.at(cxn.GetFd().Get()) = ProtobufClient{std::move(cxn)};
+        clients_.emplace(cxn.GetFd().Get(), std::move(cxn));
     }
   }
 
   // Finally, process read events for existing clients
   for (size_t fd = 0; fd <= max_fd; ++fd) {
-    if (FD_ISSET(fd, readable_fds)) {
+    if (FD_ISSET(fd, readable_fds) && fd != tls_server_.GetFd().Get()) {
       LOG(INFO) << "Socket fd " << fd << " is readable";
 
       if (clients_.count(fd) == 0) {
@@ -219,6 +238,14 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
       LOG(INFO) << ToString(msg.type) << " protobuf message read successfully from "
                 << ToString(client->GetType()) << " client";
 
+      if (handlers_.count(client->GetType()) == 0)
+      {
+        LOG(ERROR) << "No handler for client type: " << ToString(client->GetType())
+                   << ". Ignoring message...";
+  LOG(ERROR) << "bozkurtus -- Server::ProcessReadableSockets() -- end";
+        return true;
+      }
+
       // Client is already differentiated. Pass to relevant handler
       assert(handlers_.count(client->GetType()) == 1);
 
@@ -232,6 +259,7 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
     }
   }
 
+  LOG(ERROR) << "bozkurtus -- Server::ProcessReadableSockets() -- end";
   return true;
 }
 

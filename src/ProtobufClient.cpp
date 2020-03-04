@@ -18,28 +18,37 @@ namespace organicdump
 
 ProtobufClient::ProtobufClient(TlsConnection cxn)
   : cxn_{std::move(cxn)},
-    type_{ClientType::UNDIFFERENTIATED},
+    type_{ClientType::UNKNOWN},
     id_{} {}
 
 bool ProtobufClient::Read(OrganicDumpProtoMessage *out_msg, bool *out_cxn_closed)
 {
+    LOG(ERROR) << "bozkurtus -- ProtobufClient::Read() -- call";
+
   assert(out_msg);
-  assert(out_cxn_closed);
 
   if (!ReadTlsProtobufMessage(
         &cxn_,
         out_msg,
         out_cxn_closed))
   {
+    if (out_cxn_closed)
+    {
+      return true;
+    }
+
     LOG(ERROR) << "Failed to read TLS protobuf message";
     return false;
   }
 
+    LOG(ERROR) << "bozkurtus -- ProtobufClient::Read() -- end";
   return true;
 }
 
 bool ProtobufClient::Write(OrganicDumpProtoMessage *msg, bool *out_cxn_closed)
 {
+  assert(msg);
+
   if (!SendTlsProtobufMessage(
         &cxn_,
         msg,
@@ -69,13 +78,13 @@ size_t ProtobufClient::GetId() const
 
 bool ProtobufClient::IsDifferentiated() const
 {
-  return type_ != ClientType::UNDIFFERENTIATED;
+  return type_ != ClientType::UNKNOWN;
 }
 
 void ProtobufClient::Differentiate(organicdump_proto::ClientType type, size_t id)
 {
   assert(!IsDifferentiated());
-  assert(type != ClientType::UNDIFFERENTIATED);
+  assert(type != ClientType::UNKNOWN);
   type_ = type;
   id_ = id;
 }

@@ -23,8 +23,13 @@ public:
   bool OrphanRpiOwnedPeripheral(size_t peripheral_id);
   bool AssignPeripheralToRpi(size_t rpi_id, size_t peripheral_id);
   bool ContainsRpi(size_t id);
+  bool ContainsRpi(const std::string &name);
   bool ContainsPeripheral(const std::string &name);
   bool ContainsPeripheral(size_t id);
+  bool InsertRpi(
+      const std::string &name,
+      const std::string &location,
+      size_t *out_id);
   bool InsertSoilMoistureSensor(
       const std::string& name,
       float floor,
@@ -33,10 +38,6 @@ public:
   bool InsertSoilMoistureMeasurement(
       size_t sensor_id,
       float measurement);
-  bool InsertRpi(
-      const std::string &name,
-      const std::string &location,
-      size_t *out_id);
 
 private:
   void CloseResources();

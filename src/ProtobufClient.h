@@ -17,8 +17,8 @@ public:
   ProtobufClient(
       network::TlsConnection cxn,
       organicdump_proto::ClientType type);
-  bool Read(OrganicDumpProtoMessage *out_msg, bool *out_cxn_closed);
-  bool Write(OrganicDumpProtoMessage *msg, bool *out_cxn_closed);
+  bool Read(OrganicDumpProtoMessage *out_msg, bool *out_cxn_closed=nullptr);
+  bool Write(OrganicDumpProtoMessage *msg, bool *out_cxn_closed=nullptr);
   const network::Fd &GetFd() const;
   const organicdump_proto::ClientType &GetType() const;
   size_t GetId() const;

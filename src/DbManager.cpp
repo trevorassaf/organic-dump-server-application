@@ -31,16 +31,20 @@ std::string MakeTimestamp() {
 
 bool ContainsRecordById(mysqlx::Schema *schema, const char *table_name, size_t id)
 {
+  LOG(ERROR) << "bozkurtus -- DbManager -- ContainsRecordById() -- call";
+
   assert(table_name);
 
   mysqlx::Table table = schema->getTable(table_name);
 
   size_t record_count =
-      table.select()
+      table.select("id")
           .where("id = :key")
-          .bind(":key", id)
+          .bind("key", id)
           .execute()
           .count();
+
+  LOG(ERROR) << "bozkurtus -- DbManager -- ContainsRecordById() -- end";
 
   return record_count > 0;
 }
@@ -52,17 +56,27 @@ namespace organicdump
 bool DbManager::Create(DbManager *out_manager) {
   assert(out_manager);
 
+  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- call";
+
   auto session = std::make_unique<mysqlx::Session>(DB_URL);
   bool check_db_existence = true;
+
+  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- after session ";
+
   auto db = std::make_unique<mysqlx::Schema>(
       session->getSchema(DB_NAME, check_db_existence));
+
+  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- after schema";
 
   if (!db->existsInDatabase()) {
     LOG(ERROR) << "Schema " << DB_NAME << " does not exist in db";
     return false;
   }
 
+  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- after existsInDatabase";
+
   *out_manager = DbManager{std::move(session), std::move(db)};
+  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- end";
   return true;
 }
 
@@ -120,8 +134,7 @@ bool DbManager::AssignPeripheralToRpi(size_t rpi_id, size_t peripheral_id)
 
   const mysqlx::Result result = edges_table
       .insert("rpi_id", "peripheral_id")
-      .values(1, rpi_id)
-      .values(2, peripheral_id)
+      .values(rpi_id, peripheral_id)
       .execute();
 
   if (result.getAffectedItemsCount() == 0)
@@ -135,7 +148,28 @@ bool DbManager::AssignPeripheralToRpi(size_t rpi_id, size_t peripheral_id)
 
 bool DbManager::ContainsRpi(size_t id)
 {
+  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi(size_t id) -- call/end";
   return ContainsRecordById(db_.get(), RPIS_TABLE, id);
+}
+
+bool DbManager::ContainsRpi(const std::string &name)
+{
+  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi() -- call";
+
+  mysqlx::Table table = db_->getTable(RPIS_TABLE);
+
+  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi() -- before select";
+
+  size_t record_count =
+      table.select("name")
+          .where("name = :rpi_name")
+          .bind("rpi_name", name)
+          .execute()
+          .count();
+
+  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi() -- end";
+
+  return record_count > 0;
 }
 
 bool DbManager::ContainsPeripheral(const std::string &name)
@@ -143,9 +177,9 @@ bool DbManager::ContainsPeripheral(const std::string &name)
   mysqlx::Table table = db_->getTable(PERIPHERALS_TABLE);
 
   size_t record_count =
-      table.select()
+      table.select("name")
           .where("name = :name")
-          .bind(":name", name)
+          .bind("name", name)
           .execute()
           .count();
 
@@ -165,8 +199,7 @@ bool DbManager::InsertPeripheral(const std::string &name, size_t *out_id)
 
   const mysqlx::Result result = peripherals_table
       .insert("name", "time")
-      .values(1, name)
-      .values(2, MakeTimestamp())
+      .values(name, MakeTimestamp())
       .execute();
 
   if (result.getAffectedItemsCount() == 0)
@@ -188,23 +221,21 @@ bool DbManager::InsertSoilMoistureSensor(
   LOG(INFO) << "Registering soil moisture sensor w/database, {name="
             << name << ", floor=" << floor << ", ceil=" << ceil << "}";
 
-  try
-  {
+  //try
+  //{
     session_->startTransaction();
 
     if (!InsertPeripheral(name, out_id))
     {
       LOG(ERROR) << "Failed to insert peripheral record";
-      goto error;
+   //   goto error;
     }
 
     mysqlx::Table table = db_->getTable(SOIL_MOISTURE_SENSORS_TABLE);
 
     const mysqlx::Result result = table
         .insert("peripheral_id", "ceiling", "floor")
-        .values(1, *out_id)
-        .values(2, ceil)
-        .values(3, floor)
+        .values(*out_id, ceil, floor)
         .execute();
 
     if (result.getAffectedItemsCount() == 0)
@@ -214,12 +245,15 @@ bool DbManager::InsertSoilMoistureSensor(
     }
 
     LOG(INFO) << "Soil moisture sensor registered successfully";
+    session_->commit();
     return true;
+    /*
   }
   catch (...)
   {
     goto error;
   }
+  */
 
 error:
     LOG(ERROR) << "Transaction failure when inserting soil moisture sensor. Rolling back...";
@@ -234,9 +268,7 @@ bool DbManager::InsertSoilMoistureMeasurement(
   mysqlx::Table table = db_->getTable(SOIL_MOISTURE_MEASUREMENTS_TABLE);
   const mysqlx::Result result = table
       .insert("sensor_id", "measurement", "timestamp")
-      .values(1, sensor_id)
-      .values(2, measurement)
-      .values(3, MakeTimestamp())
+      .values(sensor_id, measurement, MakeTimestamp())
       .execute();
 
   if (result.getAffectedItemsCount() == 0)
@@ -253,14 +285,14 @@ bool DbManager::InsertRpi(
     const std::string &location,
     size_t *out_id)
 {
+  LOG(ERROR) << "bozkurtus -- DbManager::InsertRpi() -- call";
+
   assert(out_id);
   mysqlx::Table rpi_table = db_->getTable(RPIS_TABLE);
 
   const mysqlx::Result result = rpi_table
       .insert("name", "time", "location")
-      .values(1, name)
-      .values(2, MakeTimestamp())
-      .values(3, location)
+      .values(name, MakeTimestamp(), location)
       .execute();
 
   if (result.getAffectedItemsCount() == 0)
@@ -270,11 +302,19 @@ bool DbManager::InsertRpi(
   }
 
   *out_id = result.getAutoIncrementValue();
+
+  LOG(ERROR) << "bozkurtus -- DbManager::InsertRpi() -- end";
+
   return true;
 }
 
 void DbManager::CloseResources()
 {
+  if (!is_initialized_)
+  {
+    return;
+  }
+
   is_initialized_ = false;
   session_->close();
   session_.reset();
@@ -283,11 +323,13 @@ void DbManager::CloseResources()
 
 void DbManager::StealResources(DbManager *other)
 {
+  LOG(ERROR) << "bozkurtus -- DbManager::StealResources() -- call";
   assert(other);
   is_initialized_ = other->is_initialized_;
   other->is_initialized_ = false;
   session_ = std::move(other->session_);
   db_ = std::move(other->db_);
+  LOG(ERROR) << "bozkurtus -- DbManager::StealResources() -- end";
 }
 
 } // namespace organicdump

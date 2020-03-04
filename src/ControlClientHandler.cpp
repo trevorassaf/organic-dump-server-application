@@ -9,11 +9,15 @@
 #include "OrganicDumpProtoMessage.h"
 #include "SqlUtils.h"
 
+#define UNUSED(x) (void)(x)
+
 namespace
 {
 using organicdump_proto::ClientType;
+using organicdump_proto::BasicResponse;
+using organicdump_proto::ErrorCode;
 using organicdump_proto::MessageType;
-using organicdump_proto::RegisterClient;
+using organicdump_proto::RegisterRpi;
 
 using ClientMap = std::unordered_map<int, organicdump::ProtobufClient>;
 
@@ -24,6 +28,7 @@ namespace organicdump
 
 bool ControlClientHandler::Create(ControlClientHandler *out_handler)
 {
+  LOG(ERROR) << "bozkurtus -- ControlClientHander::Create() -- call";
   assert(out_handler);
 
   DbManager db;
@@ -33,7 +38,10 @@ bool ControlClientHandler::Create(ControlClientHandler *out_handler)
     return false;
   }
 
+  LOG(ERROR) << "bozkurtus -- ControlClientHander::Create() -- after DbManager::Create()";
+
   *out_handler = ControlClientHandler{std::move(db)};
+  LOG(ERROR) << "bozkurtus -- ControlClientHander::Create() -- end";
   return true;
 }
 
@@ -62,24 +70,29 @@ ControlClientHandler &ControlClientHandler::operator=(ControlClientHandler &&oth
 bool ControlClientHandler::Handle(
     const OrganicDumpProtoMessage &msg,
     ProtobufClient *client,
-    ClientMap *clients)
+    ClientMap *all_clients)
 {
+  LOG(ERROR) << "bozkurtus -- ControlClientHander::Handle() -- call";
+
   assert(client);
-  assert(clients);
+  assert(all_clients);
   assert(client->IsDifferentiated());
   assert(client->GetType() == ClientType::CONTROL);
 
+  LOG(ERROR) << "bozkurtus -- ControlClientHander::Handle() -- before switch()";
+
   switch (msg.type) {
-    case MessageType::REGISTER_CLIENT:
-      return RegisterClient(msg.register_client);
+    case MessageType::REGISTER_RPI:
+      return RegisterRpi(msg.register_rpi, client);
     case MessageType::REGISTER_SOIL_MOISTURE_SENSOR:
-      return RegisterSoilMoistureSensor(msg.register_soil_moisture_sensor);
+      return RegisterSoilMoistureSensor(msg.register_soil_moisture_sensor, client);
     case MessageType::UPDATE_PERIPHERAL_OWNERSHIP:
-      return UpdatePeripheralOwnership(msg.update_peripheral_ownership);
+      return UpdatePeripheralOwnership(msg.update_peripheral_ownership, client);
     default:
       LOG(ERROR) << "Received unexpected message from Control Client: " << MessageType_Name(msg.type);
       return false;
   }
+  LOG(ERROR) << "bozkurtus -- ControlClientHander::Handle() -- end";
 }
 
 void ControlClientHandler::CloseResources()
@@ -96,19 +109,59 @@ void ControlClientHandler::StealResources(ControlClientHandler *other)
   db_ = std::move(other->db_);
 }
 
-bool ControlClientHandler::RegisterClient(const organicdump_proto::RegisterClient &msg)
+bool ControlClientHandler::RegisterRpi(
+    const organicdump_proto::RegisterRpi &msg,
+    ProtobufClient *client)
 {
-  // Throw error if client already exists with this name
+  UNUSED(client);
 
-  // Insert new record
-  return false;
+  LOG(ERROR) << "bozkurtus -- ControlClientHandler::RegisterRpi() -- call";
+
+  if (db_.ContainsRpi(msg.name()))
+  {
+    LOG(ERROR) << "RPi already exists with name: " << msg.name();
+
+    return SendFailedBasicResponse(
+        ErrorCode::INVALID_PARAMETER,
+        "RPi with that name already exists",
+        client);
+  }
+
+  size_t id; 
+  if (!db_.InsertRpi(
+        msg.name(),
+        msg.location(),
+        &id))
+  {
+    LOG(ERROR) << "Failed to insert RPi record";
+
+    SendFailedBasicResponse(
+        ErrorCode::INTERNAL_SERVER_ERROR,
+        "Failed to insert RPi record",
+        client);
+
+    return false;
+  }
+
+  LOG(INFO) << "Registered RPi with ID: " << id;
+
+  if (!SendSuccessfulBasicResponse(id, client))
+  {
+    LOG(ERROR) << "Failed to send basic response with rpi id: " << id;
+    return false;
+  }
+
+  LOG(ERROR) << "bozkurtus -- ControlClientHandler::RegisterRpi() -- end";
+  return true;
 }
 
 bool ControlClientHandler::RegisterSoilMoistureSensor(
-    const organicdump_proto::RegisterSoilMoistureSensor &msg)
+    const organicdump_proto::RegisterSoilMoistureSensor &msg,
+    ProtobufClient *client)
 {
-  // Validate soil moisture records
-  if (!db_.ContainsRpi(msg.meta().rpi_id())) {
+  UNUSED(client);
+
+  if (msg.meta().has_rpi_id() && !db_.ContainsRpi(msg.meta().rpi_id())) {
     LOG(ERROR) << "RPI does not exist. ID: " << msg.meta().rpi_id();
     return false;
   }
@@ -118,23 +171,34 @@ bool ControlClientHandler::RegisterSoilMoistureSensor(
     return false;
   }
 
-  // Insert records for soil moisture sensor
   size_t id;
-
   if (!db_.InsertSoilMoistureSensor(
           msg.meta().name(),
           msg.floor(),
           msg.ceil(),
           &id)) {
     LOG(ERROR) << "Failed to insert soil moisture sensor";
+    return false;
+  }
+
+  LOG(INFO) << "Registered soil moisture sensor with ID: " << id;
+
+  if (!SendSuccessfulBasicResponse(id, client))
+  {
+    LOG(ERROR) << "Failed to send successful response to client.";
+    return false;
   }
 
   return true;
 }
 
 bool ControlClientHandler::UpdatePeripheralOwnership(
-    const organicdump_proto::UpdatePeripheralOwnership &msg)
+    const organicdump_proto::UpdatePeripheralOwnership &msg,
+    ProtobufClient *client)
+
 {
+  UNUSED(client);
+
   LOG(INFO) << "Updating peripheral ownership: "
             << "rpi_id=" << msg.rpi_id() << ", "
             << "peripheral_id=" << msg.peripheral_id();
@@ -164,6 +228,43 @@ bool ControlClientHandler::UpdatePeripheralOwnership(
   if (!db_.AssignPeripheralToRpi(msg.rpi_id(), msg.peripheral_id()))
   {
     LOG(ERROR) << "Failed to reparent peripheral";
+  }
+
+  return true;
+}
+
+bool ControlClientHandler::SendSuccessfulBasicResponse(
+    size_t id,
+    ProtobufClient *client)
+{
+  BasicResponse resp;
+  resp.set_code(ErrorCode::OK);
+  resp.set_id(id);
+  OrganicDumpProtoMessage msg{std::move(resp)};
+
+  if (!client->Write(&msg))
+  {
+    LOG(ERROR) << "Failed to send successful basic response";
+    return false;
+  }
+
+  return true;
+}
+
+bool ControlClientHandler::SendFailedBasicResponse(
+    organicdump_proto::ErrorCode code,
+    const std::string& message,
+    ProtobufClient *client)
+{
+  BasicResponse resp;
+  resp.set_code(code);
+  resp.set_message(message);
+  OrganicDumpProtoMessage msg{std::move(resp)};
+
+  if (!client->Write(&msg))
+  {
+    LOG(ERROR) << "Failed to send failed basic response";
+    return false;
   }
 
   return true;

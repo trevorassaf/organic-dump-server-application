@@ -48,11 +48,11 @@ int main(int argc, char **argv)
   TlsServer server;
   TlsServerFactory server_factory;
   if (!server_factory.Create(
+        FLAGS_port,
         FLAGS_cert,
         FLAGS_key,
         FLAGS_ca,
-        FLAGS_port,
-        network::WaitPolicy::NON_BLOCKING,
+        network::WaitPolicy::BLOCKING,
         &server))
   {
       LOG(ERROR) << "Failed to create server";

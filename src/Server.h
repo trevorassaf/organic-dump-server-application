@@ -24,14 +24,16 @@ public:
 
 public:
   Server();
-  Server(network::TlsServer tls_server);
+  Server(
+      network::TlsServer tls_server,
+      std::unordered_map<organicdump_proto::ClientType,
+                         std::unique_ptr<ClientHandler>> handlers);
   Server(Server &&other);
   Server &operator=(Server &&other);
   ~Server();
   bool Run();
 
 private:
-  void InitHandlers();
   void KickAllClients();
   bool ProcessReadableSockets(fd_set *readable_fds, int max_fd);
   void StealResources(Server *other);
