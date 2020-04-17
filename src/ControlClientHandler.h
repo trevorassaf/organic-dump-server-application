@@ -41,8 +41,12 @@ private:
   bool UpdatePeripheralOwnership(
       const organicdump_proto::UpdatePeripheralOwnership &msg,
       ProtobufClient *client);
+  bool StoreSoilMoistureMeasurement(
+      const organicdump_proto::SendSoilMoistureMeasurement &msg,
+      ProtobufClient *client);
 
 private:
+  bool SendSuccessfulBasicResponse(ProtobufClient *client);
   bool SendSuccessfulBasicResponse(size_t id, ProtobufClient *client);
   bool SendFailedBasicResponse(
       organicdump_proto::ErrorCode code,

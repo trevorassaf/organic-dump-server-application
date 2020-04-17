@@ -37,12 +37,18 @@ public:
       size_t *out_id);
   bool InsertSoilMoistureMeasurement(
       size_t sensor_id,
-      float measurement);
+      float measurement,
+      size_t *out_measurement_id);
+  bool UpdatePeripheralOwnership(
+      size_t peripheral_id,
+      size_t rpi_id);
 
 private:
   void CloseResources();
   void StealResources(DbManager *other);
   bool InsertPeripheral(const std::string &name, size_t *out_id);
+  bool DeletePeripheralOwnership(size_t peripheral_id);
+  bool InsertPeripheralOwnership(size_t peripheral_id, size_t rpi_id);
 
 private:
   DbManager(const DbManager &other) = delete;

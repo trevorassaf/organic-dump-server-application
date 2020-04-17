@@ -88,6 +88,8 @@ bool ControlClientHandler::Handle(
       return RegisterSoilMoistureSensor(msg.register_soil_moisture_sensor, client);
     case MessageType::UPDATE_PERIPHERAL_OWNERSHIP:
       return UpdatePeripheralOwnership(msg.update_peripheral_ownership, client);
+    case MessageType::SEND_SOIL_MOISTURE_MEASUREMENT:
+      return StoreSoilMoistureMeasurement(msg.send_soil_moisture_measurement, client);
     default:
       LOG(ERROR) << "Received unexpected message from Control Client: " << MessageType_Name(msg.type);
       return false;
@@ -228,6 +230,55 @@ bool ControlClientHandler::UpdatePeripheralOwnership(
   if (!db_.AssignPeripheralToRpi(msg.rpi_id(), msg.peripheral_id()))
   {
     LOG(ERROR) << "Failed to reparent peripheral";
+  }
+
+  if (!SendSuccessfulBasicResponse(client))
+  {
+    LOG(ERROR) << "Failed to send basic response to client";
+    return false;
+  }
+
+  return true;
+}
+
+bool ControlClientHandler::StoreSoilMoistureMeasurement(
+      const organicdump_proto::SendSoilMoistureMeasurement &msg,
+      ProtobufClient *client)
+{
+  assert(client);
+
+  size_t measurement_id;
+
+  if (!db_.InsertSoilMoistureMeasurement(
+          msg.sensor_id(),
+          msg.value(),
+          &measurement_id))
+  {
+    LOG(ERROR) << "Failed to insert soil moisture measurement"
+               << ". Id: " << msg.sensor_id()
+               << ". Measurement: " << msg.value();
+    return false;
+  }
+
+  if (!SendSuccessfulBasicResponse(measurement_id, client))
+  {
+    LOG(ERROR) << "Failed to send basic response to client";
+    return false;
+  }
+
+  return true;
+}
+
+bool ControlClientHandler::SendSuccessfulBasicResponse(ProtobufClient *client)
+{
+  BasicResponse resp;
+  resp.set_code(ErrorCode::OK);
+  OrganicDumpProtoMessage msg{std::move(resp)};
+
+  if (!client->Write(&msg))
+  {
+    LOG(ERROR) << "Failed to send successful basic response";
+    return false;
   }
 
   return true;

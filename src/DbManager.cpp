@@ -18,7 +18,7 @@ constexpr const char *RPIS_TABLE = "rpis";
 constexpr const char *PERIPHERALS_TABLE = "peripherals";
 constexpr const char *RPI_PERIPHERAL_EDGES_TABLE = "rpi_peripheral_edges";
 constexpr const char *SOIL_MOISTURE_SENSORS_TABLE = "soil_moisture_sensors";
-constexpr const char *SOIL_MOISTURE_MEASUREMENTS_TABLE = "soil_moisture_measurements";
+constexpr const char *SOIL_MOISTURE_MEASUREMENTS_TABLE = "soil_moisture_readings";
 
 std::string MakeTimestamp() {
   auto t = std::time(nullptr);
@@ -116,7 +116,7 @@ bool DbManager::OrphanRpiOwnedPeripheral(size_t peripheral_id)
   const mysqlx::Result result = edges_table
       .remove()
       .where("peripheral_id = :id")
-      .bind(":id", peripheral_id)
+      .bind("id", peripheral_id)
       .execute();
 
   if (result.getAffectedItemsCount() == 0)
@@ -177,7 +177,7 @@ bool DbManager::ContainsPeripheral(const std::string &name)
   mysqlx::Table table = db_->getTable(PERIPHERALS_TABLE);
 
   size_t record_count =
-      table.select("name")
+      table.select("id")
           .where("name = :name")
           .bind("name", name)
           .execute()
@@ -188,7 +188,7 @@ bool DbManager::ContainsPeripheral(const std::string &name)
 
 bool DbManager::ContainsPeripheral(size_t id)
 {
-  return ContainsRecordById(db_.get(), RPI_PERIPHERAL_EDGES_TABLE, id);
+  return ContainsRecordById(db_.get(), PERIPHERALS_TABLE, id);
 }
 
 bool DbManager::InsertPeripheral(const std::string &name, size_t *out_id)
@@ -212,6 +212,59 @@ bool DbManager::InsertPeripheral(const std::string &name, size_t *out_id)
   return true;
 }
 
+bool DbManager::DeletePeripheralOwnership(size_t peripheral_id)
+{
+  try
+  {
+    mysqlx::Table rpi_peripheral_edges =
+        db_->getTable(RPI_PERIPHERAL_EDGES_TABLE);
+
+    const mysqlx::Result result = rpi_peripheral_edges
+      .remove()
+      .where("peripheral_id = :pid")
+      .bind("pid", peripheral_id)
+      .execute();
+
+    LOG(INFO) << "Removed " << result.getAffectedItemsCount()
+              << " from " << RPI_PERIPHERAL_EDGES_TABLE;
+  }
+  catch (const mysqlx::Error e)
+  {
+    LOG(ERROR) << "Failed to remove record from " << RPI_PERIPHERAL_EDGES_TABLE
+               << ". Error: " << e;
+    return false;
+  }
+
+  return true;
+}
+
+bool DbManager::InsertPeripheralOwnership(
+    size_t peripheral_id,
+    size_t rpi_id)
+{
+  try
+  {
+    mysqlx::Table rpi_peripheral_edges =
+        db_->getTable(RPI_PERIPHERAL_EDGES_TABLE);
+
+    const mysqlx::Result result = rpi_peripheral_edges
+      .insert("peripheral_id", "rpi_id")
+      .values(peripheral_id, rpi_id)
+      .execute();
+
+    LOG(INFO) << "Inserted " << result.getAffectedItemsCount() << " rows into "
+              << RPI_PERIPHERAL_EDGES_TABLE;
+
+    return true;
+  }
+  catch (const mysqlx::Error e)
+  {
+    LOG(ERROR) << "Failed to insert record into " << RPI_PERIPHERAL_EDGES_TABLE
+               << ". Error: " << e;
+    return false;
+  }
+}
+
 bool DbManager::InsertSoilMoistureSensor(
     const std::string& name,
     float floor,
@@ -221,14 +274,14 @@ bool DbManager::InsertSoilMoistureSensor(
   LOG(INFO) << "Registering soil moisture sensor w/database, {name="
             << name << ", floor=" << floor << ", ceil=" << ceil << "}";
 
-  //try
-  //{
+  try
+  {
     session_->startTransaction();
 
     if (!InsertPeripheral(name, out_id))
     {
       LOG(ERROR) << "Failed to insert peripheral record";
-   //   goto error;
+      goto error;
     }
 
     mysqlx::Table table = db_->getTable(SOIL_MOISTURE_SENSORS_TABLE);
@@ -247,13 +300,12 @@ bool DbManager::InsertSoilMoistureSensor(
     LOG(INFO) << "Soil moisture sensor registered successfully";
     session_->commit();
     return true;
-    /*
   }
-  catch (...)
+  catch (const mysqlx::Error e)
   {
+    LOG(ERROR) << e;
     goto error;
   }
-  */
 
 error:
     LOG(ERROR) << "Transaction failure when inserting soil moisture sensor. Rolling back...";
@@ -261,23 +313,87 @@ error:
     return false;
 }
 
-bool DbManager::InsertSoilMoistureMeasurement(
-    size_t sensor_id,
-    float measurement)
-{
-  mysqlx::Table table = db_->getTable(SOIL_MOISTURE_MEASUREMENTS_TABLE);
-  const mysqlx::Result result = table
-      .insert("sensor_id", "measurement", "timestamp")
-      .values(sensor_id, measurement, MakeTimestamp())
-      .execute();
-
-  if (result.getAffectedItemsCount() == 0)
-  {
-    LOG(ERROR) << "Failed to insert soil moisture measurement record";
+bool DbManager::UpdatePeripheralOwnership(size_t peripheral_id, size_t rpi_id) {
+  // Check peripheral exists
+  if (!ContainsPeripheral(peripheral_id)) {
+    LOG(ERROR) << "Could not find peripheral w/id: " << peripheral_id;
     return false;
   }
 
-  return true;
+  // Check RPI exists
+  if (!ContainsRpi(rpi_id)) {
+    LOG(ERROR) << "Could not find rpi w/id: " << rpi_id;
+    return false;
+  }
+
+  try
+  {
+    session_->startTransaction();
+
+    // Try to ownership record
+    if (!DeletePeripheralOwnership(peripheral_id))
+    {
+      LOG(ERROR) << "Failed to delete peripheral ownership record. Id: "
+                 << peripheral_id;
+      goto error;
+    }
+
+    // Insert new ownership record
+    if (!InsertPeripheralOwnership(peripheral_id, rpi_id))
+    {
+      LOG(ERROR) << "Failed to insert peripheral ownership record"
+                 << ". Peripheral ID: " << peripheral_id
+                 << ". RPI ID: " << rpi_id;
+      goto error;
+    }
+
+    LOG(INFO) << "Peripheral ownership updated successfully!";
+    session_->commit();
+    return true;
+  }
+  catch (const mysqlx::Error &e)
+  {
+    LOG(ERROR) << e;
+    goto error;
+  }
+
+error:
+  LOG(ERROR) << "Transaction failure when updating peripheral paranetage. Rolling back...";
+  session_->rollback();
+  return false;
+}
+
+bool DbManager::InsertSoilMoistureMeasurement(
+    size_t sensor_id,
+    float measurement,
+    size_t *out_measurement_id)
+{
+  assert(out_measurement_id);
+
+  try
+  {
+    mysqlx::Table table = db_->getTable(SOIL_MOISTURE_MEASUREMENTS_TABLE);
+    const mysqlx::Result result = table
+        .insert("sensor_id", "reading", "time")
+        .values(sensor_id, measurement, MakeTimestamp())
+        .execute();
+
+    if (result.getAffectedItemsCount() == 0)
+    {
+      LOG(ERROR) << "Failed to insert soil moisture measurement record";
+      return false;
+    }
+
+    *out_measurement_id = result.getAutoIncrementValue();
+
+    return true;
+  }
+  catch (const mysqlx::Error e)
+  {
+    LOG(ERROR) << "Failed to insert into " << SOIL_MOISTURE_MEASUREMENTS_TABLE
+               << ". Error: " << e;
+    return false;
+  }
 }
 
 bool DbManager::InsertRpi(
@@ -287,25 +403,33 @@ bool DbManager::InsertRpi(
 {
   LOG(ERROR) << "bozkurtus -- DbManager::InsertRpi() -- call";
 
-  assert(out_id);
-  mysqlx::Table rpi_table = db_->getTable(RPIS_TABLE);
-
-  const mysqlx::Result result = rpi_table
-      .insert("name", "time", "location")
-      .values(name, MakeTimestamp(), location)
-      .execute();
-
-  if (result.getAffectedItemsCount() == 0)
+  try
   {
-    LOG(ERROR) << "Failed to insert peripheral";
+    assert(out_id);
+    mysqlx::Table rpi_table = db_->getTable(RPIS_TABLE);
+
+    const mysqlx::Result result = rpi_table
+        .insert("name", "time", "location")
+        .values(name, MakeTimestamp(), location)
+        .execute();
+
+    if (result.getAffectedItemsCount() == 0)
+    {
+      LOG(ERROR) << "Failed to insert peripheral";
+      return false;
+    }
+
+    *out_id = result.getAutoIncrementValue();
+
+    LOG(ERROR) << "bozkurtus -- DbManager::InsertRpi() -- end";
+
+    return true;
+  }
+  catch (const mysqlx::Error e)
+  {
+    LOG(ERROR) << "Failed to insert into " << RPIS_TABLE << ". Error: " << e;
     return false;
   }
-
-  *out_id = result.getAutoIncrementValue();
-
-  LOG(ERROR) << "bozkurtus -- DbManager::InsertRpi() -- end";
-
-  return true;
 }
 
 void DbManager::CloseResources()
