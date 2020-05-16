@@ -23,8 +23,6 @@ ProtobufClient::ProtobufClient(TlsConnection cxn)
 
 bool ProtobufClient::Read(OrganicDumpProtoMessage *out_msg, bool *out_cxn_closed)
 {
-    LOG(ERROR) << "bozkurtus -- ProtobufClient::Read() -- call";
-
   assert(out_msg);
 
   if (!ReadTlsProtobufMessage(
@@ -41,7 +39,6 @@ bool ProtobufClient::Read(OrganicDumpProtoMessage *out_msg, bool *out_cxn_closed
     return false;
   }
 
-    LOG(ERROR) << "bozkurtus -- ProtobufClient::Read() -- end";
   return true;
 }
 

@@ -37,8 +37,6 @@ bool Server::Create(
   std::string ca_file,
   Server *out_server)
 {
-  LOG(ERROR) << "bozkurtus -- Server::Create() -- call";
-
   TlsServer tls_server;
   TlsServerFactory server_factory;
   if (!server_factory.Create(
@@ -53,8 +51,6 @@ bool Server::Create(
     return false;
   }
 
-  LOG(ERROR) << "bozkurtus -- Server::Create() -- before ControlClientHandler Create()";
-
   ControlClientHandler control_handler;
   if (!ControlClientHandler::Create(&control_handler))
   {
@@ -62,19 +58,13 @@ bool Server::Create(
     return false;
   }
 
-  LOG(ERROR) << "bozkurtus -- Server::Create() -- after ControlClientHandler Create()";
-
   std::unordered_map<organicdump_proto::ClientType,
                      std::unique_ptr<ClientHandler>> handlers;
   handlers[ClientType::CONTROL] =
       std::make_unique<ControlClientHandler>(std::move(control_handler));
 
-  LOG(ERROR) << "bozkurtus -- Server::Create() -- after CONTROL entry";
-
   handlers[ClientType::UNKNOWN] =
       std::make_unique<UndifferentiatedClientHandler>();
-
-  LOG(ERROR) << "bozkurtus -- Server::Create() -- after UNDIF entry";
 
   *out_server = Server{std::move(tls_server), std::move(handlers)};
   return true;
@@ -111,37 +101,27 @@ bool Server::Run()
 {
   LOG(INFO) << "Starting organic dump server...";
 
-LOG(ERROR) << "bozkurtus -- Server::Run() -- call";
   while (true)
   {
-
-LOG(ERROR) << "bozkurtus -- Server::Run() -- while loop top";
-
      fd_set read_fds;
      FD_ZERO(&read_fds);
 
      int max_fd = tls_server_.GetFd().Get();
      FD_SET(max_fd, &read_fds);
 
-     LOG(ERROR) << "bozkurtus -- Server::Run() -- server fd: " << max_fd;
-
      for (auto &entry : clients_)
      {
-
-     LOG(ERROR) << "bozkurtus -- Server::Run() -- client fd: " << entry.first;
 
        if (entry.first > max_fd)
        {
          max_fd = entry.first;
        }
 
-       LOG(ERROR) << "bozkurtus -- Adding fd to select FD_SET: " << entry.first;
        FD_SET(entry.first, &read_fds);
      }
 
      LOG(INFO) << "Entering select()...";
 
-LOG(ERROR) << "bozkurtus -- Server::Run() -- before select()";
      int result = select(
          max_fd + 1,
          &read_fds,
@@ -167,7 +147,6 @@ LOG(ERROR) << "bozkurtus -- Server::Run() -- before select()";
            KickAllClients();
            return false;
          }
-LOG(ERROR) << "bozkurtus -- Server::Run() -- after ProcessReadableSockets() successful";
 
          LOG(INFO) << "Processed all readable sockets successfully";
          break;
@@ -186,8 +165,6 @@ void Server::KickAllClients()
 
 bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
 {
-  LOG(ERROR) << "bozkurtus -- Server::ProcessReadableSockets() -- call";
-
   assert(readable_fds);
 
   // First, check whether it's a new connection
@@ -242,7 +219,6 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
       {
         LOG(ERROR) << "No handler for client type: " << ToString(client->GetType())
                    << ". Ignoring message...";
-  LOG(ERROR) << "bozkurtus -- Server::ProcessReadableSockets() -- end";
         return true;
       }
 
@@ -259,7 +235,6 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
     }
   }
 
-  LOG(ERROR) << "bozkurtus -- Server::ProcessReadableSockets() -- end";
   return true;
 }
 

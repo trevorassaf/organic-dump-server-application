@@ -28,7 +28,6 @@ namespace organicdump
 
 bool ControlClientHandler::Create(ControlClientHandler *out_handler)
 {
-  LOG(ERROR) << "bozkurtus -- ControlClientHander::Create() -- call";
   assert(out_handler);
 
   DbManager db;
@@ -38,10 +37,7 @@ bool ControlClientHandler::Create(ControlClientHandler *out_handler)
     return false;
   }
 
-  LOG(ERROR) << "bozkurtus -- ControlClientHander::Create() -- after DbManager::Create()";
-
   *out_handler = ControlClientHandler{std::move(db)};
-  LOG(ERROR) << "bozkurtus -- ControlClientHander::Create() -- end";
   return true;
 }
 
@@ -72,14 +68,10 @@ bool ControlClientHandler::Handle(
     ProtobufClient *client,
     ClientMap *all_clients)
 {
-  LOG(ERROR) << "bozkurtus -- ControlClientHander::Handle() -- call";
-
   assert(client);
   assert(all_clients);
   assert(client->IsDifferentiated());
   assert(client->GetType() == ClientType::CONTROL);
-
-  LOG(ERROR) << "bozkurtus -- ControlClientHander::Handle() -- before switch()";
 
   switch (msg.type) {
     case MessageType::REGISTER_RPI:
@@ -94,7 +86,6 @@ bool ControlClientHandler::Handle(
       LOG(ERROR) << "Received unexpected message from Control Client: " << MessageType_Name(msg.type);
       return false;
   }
-  LOG(ERROR) << "bozkurtus -- ControlClientHander::Handle() -- end";
 }
 
 void ControlClientHandler::CloseResources()
@@ -116,8 +107,6 @@ bool ControlClientHandler::RegisterRpi(
     ProtobufClient *client)
 {
   UNUSED(client);
-
-  LOG(ERROR) << "bozkurtus -- ControlClientHandler::RegisterRpi() -- call";
 
   if (db_.ContainsRpi(msg.name()))
   {
@@ -153,7 +142,6 @@ bool ControlClientHandler::RegisterRpi(
     return false;
   }
 
-  LOG(ERROR) << "bozkurtus -- ControlClientHandler::RegisterRpi() -- end";
   return true;
 }
 

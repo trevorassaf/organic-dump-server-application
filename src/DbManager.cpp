@@ -31,8 +31,6 @@ std::string MakeTimestamp() {
 
 bool ContainsRecordById(mysqlx::Schema *schema, const char *table_name, size_t id)
 {
-  LOG(ERROR) << "bozkurtus -- DbManager -- ContainsRecordById() -- call";
-
   assert(table_name);
 
   mysqlx::Table table = schema->getTable(table_name);
@@ -44,8 +42,6 @@ bool ContainsRecordById(mysqlx::Schema *schema, const char *table_name, size_t i
           .execute()
           .count();
 
-  LOG(ERROR) << "bozkurtus -- DbManager -- ContainsRecordById() -- end";
-
   return record_count > 0;
 }
 } // namespace
@@ -56,27 +52,18 @@ namespace organicdump
 bool DbManager::Create(DbManager *out_manager) {
   assert(out_manager);
 
-  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- call";
-
   auto session = std::make_unique<mysqlx::Session>(DB_URL);
   bool check_db_existence = true;
 
-  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- after session ";
-
   auto db = std::make_unique<mysqlx::Schema>(
       session->getSchema(DB_NAME, check_db_existence));
-
-  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- after schema";
 
   if (!db->existsInDatabase()) {
     LOG(ERROR) << "Schema " << DB_NAME << " does not exist in db";
     return false;
   }
 
-  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- after existsInDatabase";
-
   *out_manager = DbManager{std::move(session), std::move(db)};
-  LOG(ERROR) << "bozkurtus -- DbManager::Create() -- end";
   return true;
 }
 
@@ -148,26 +135,18 @@ bool DbManager::AssignPeripheralToRpi(size_t rpi_id, size_t peripheral_id)
 
 bool DbManager::ContainsRpi(size_t id)
 {
-  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi(size_t id) -- call/end";
   return ContainsRecordById(db_.get(), RPIS_TABLE, id);
 }
 
 bool DbManager::ContainsRpi(const std::string &name)
 {
-  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi() -- call";
-
   mysqlx::Table table = db_->getTable(RPIS_TABLE);
-
-  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi() -- before select";
-
   size_t record_count =
       table.select("name")
           .where("name = :rpi_name")
           .bind("rpi_name", name)
           .execute()
           .count();
-
-  LOG(ERROR) << "bozkurtus -- DbManager::ContainsRpi() -- end";
 
   return record_count > 0;
 }
@@ -401,8 +380,6 @@ bool DbManager::InsertRpi(
     const std::string &location,
     size_t *out_id)
 {
-  LOG(ERROR) << "bozkurtus -- DbManager::InsertRpi() -- call";
-
   try
   {
     assert(out_id);
@@ -420,9 +397,6 @@ bool DbManager::InsertRpi(
     }
 
     *out_id = result.getAutoIncrementValue();
-
-    LOG(ERROR) << "bozkurtus -- DbManager::InsertRpi() -- end";
-
     return true;
   }
   catch (const mysqlx::Error e)
@@ -447,13 +421,11 @@ void DbManager::CloseResources()
 
 void DbManager::StealResources(DbManager *other)
 {
-  LOG(ERROR) << "bozkurtus -- DbManager::StealResources() -- call";
   assert(other);
   is_initialized_ = other->is_initialized_;
   other->is_initialized_ = false;
   session_ = std::move(other->session_);
   db_ = std::move(other->db_);
-  LOG(ERROR) << "bozkurtus -- DbManager::StealResources() -- end";
 }
 
 } // namespace organicdump

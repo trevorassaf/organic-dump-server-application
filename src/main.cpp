@@ -29,8 +29,6 @@ void InitLibraries(const char *app_name)
 
 int main(int argc, char **argv)
 {
-  std::cout << "bozkurtus -- main() -- before CliConfig::Parse()" << std::endl;
-
   CliConfig config;
   if (!CliConfig::Parse(argc, argv, &config))
   {
