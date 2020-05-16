@@ -351,10 +351,15 @@ bool DbManager::InsertSoilMoistureMeasurement(
 
   try
   {
+    auto now = MakeTimestamp();
+    LOG(INFO) << "Inserting soil moisture reading: sensor_id="
+              << sensor_id << ", reading=" << measurement << ", time="
+              << now;
+
     mysqlx::Table table = db_->getTable(SOIL_MOISTURE_MEASUREMENTS_TABLE);
     const mysqlx::Result result = table
         .insert("sensor_id", "reading", "time")
-        .values(sensor_id, measurement, MakeTimestamp())
+        .values(sensor_id, measurement, now)
         .execute();
 
     if (result.getAffectedItemsCount() == 0)
@@ -364,6 +369,7 @@ bool DbManager::InsertSoilMoistureMeasurement(
     }
 
     *out_measurement_id = result.getAutoIncrementValue();
+    LOG(INFO) << "Successfully inserted soil moisture reading. Id=" << *out_measurement_id;
 
     return true;
   }
