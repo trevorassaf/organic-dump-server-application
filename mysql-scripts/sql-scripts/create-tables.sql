@@ -37,4 +37,9 @@ CREATE TABLE soil_moisture_readings (
   sensor_id INT NOT NULL,
   FOREIGN KEY(sensor_id) REFERENCES soil_moisture_sensors(peripheral_id));
 
+ CREATE TABLE irrigation_system (
+   peripheral_id INT NOT NULL,
+   FOREIGN KEY(peripheral_id) REFERENCES peripherals(id),
+   PRIMARY KEY(peripheral_id));
+
 SHOW TABLES;
