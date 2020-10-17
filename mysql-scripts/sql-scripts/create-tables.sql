@@ -37,18 +37,18 @@ CREATE TABLE soil_moisture_readings (
   sensor_id INT NOT NULL,
   FOREIGN KEY(sensor_id) REFERENCES soil_moisture_sensors(peripheral_id));
 
-CREATE TABLE irrigation_system (
+CREATE TABLE irrigation_systems (
   peripheral_id INT NOT NULL,
   FOREIGN KEY(peripheral_id) REFERENCES peripherals(id),
   PRIMARY KEY(peripheral_id));
 
-CREATE TABLE daily_irrigation_schedule (
+CREATE TABLE daily_irrigation_schedules (
   id INT AUTO_INCREMENT,
   PRIMARY KEY(id),
   day_of_week_index INT NOT NULL,
   irrigation_time_military VARCHAR(32) NOT NULL,
   duration_ms INT NOT NULL,
   irrigation_system_id INT NOT NULL,
-  FOREIGN KEY(irrigation_system_id) REFERENCES irrigation_system(peripheral_id));
+  FOREIGN KEY(irrigation_system_id) REFERENCES irrigation_systems(peripheral_id));
 
 SHOW TABLES;

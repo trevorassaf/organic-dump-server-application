@@ -19,6 +19,8 @@ constexpr const char *PERIPHERALS_TABLE = "peripherals";
 constexpr const char *RPI_PERIPHERAL_EDGES_TABLE = "rpi_peripheral_edges";
 constexpr const char *SOIL_MOISTURE_SENSORS_TABLE = "soil_moisture_sensors";
 constexpr const char *SOIL_MOISTURE_MEASUREMENTS_TABLE = "soil_moisture_readings";
+constexpr const char *IRRIGATION_SYSTEMS_TABLE = "irrigation_systems";
+constexpr const char *DAILY_IRRIGATION_SCHEDULES_TABLE = "daily_irrigation_schedules";
 
 std::string MakeTimestamp() {
   auto t = std::time(nullptr);
@@ -168,6 +170,10 @@ bool DbManager::ContainsPeripheral(const std::string &name)
 bool DbManager::ContainsPeripheral(size_t id)
 {
   return ContainsRecordById(db_.get(), PERIPHERALS_TABLE, id);
+}
+
+bool DbManager::ContainsIrrigationSystem(size_t id) {
+  return ContainsRecordById(db_.get(), IRRIGATION_SYSTEMS_TABLE, id);
 }
 
 bool DbManager::InsertPeripheral(const std::string &name, size_t *out_id)
@@ -410,6 +416,106 @@ bool DbManager::InsertRpi(
     LOG(ERROR) << "Failed to insert into " << RPIS_TABLE << ". Error: " << e;
     return false;
   }
+}
+
+bool DbManager::InsertIrrigationSystem(
+    const std::string& name,
+    size_t *out_id)
+{
+  assert(out_id);
+
+  LOG(INFO) << "Registering irrigation system w/database: name="
+            << name;
+  try
+  {
+    session_->startTransaction();
+
+    if (!InsertPeripheral(name, out_id))
+    {
+      LOG(ERROR) << "Failed to insert peripheral record";
+      goto error;
+    }
+
+    mysqlx::Table table = db_->getTable(IRRIGATION_SYSTEMS_TABLE);
+
+    const mysqlx::Result result = table
+        .insert("peripheral_id")
+        .values(*out_id)
+        .execute();
+
+    if (result.getAffectedItemsCount() == 0)
+    {
+      LOG(ERROR) << "Failed to insert irrigation systems record";
+      goto error;
+    }
+
+    LOG(INFO) << "Irrigation system " << *out_id << " registered successfully";
+    session_->commit();
+    return true;
+  }
+  catch (const mysqlx::Error e)
+  {
+    LOG(ERROR) << e;
+    goto error;
+  }
+
+error:
+    LOG(ERROR) << "Transaction failure when inserting irrigation system. Rolling back...";
+    session_->rollback();
+    return false;
+}
+
+bool DbManager::InsertDailyIrrigationSchedule(
+    size_t irrigation_system_id,
+    size_t day_of_week_index,
+    std::string water_time_military,
+    size_t water_duration_ms)
+{
+  LOG(INFO) << "Inserting daily irrigation schedule:"
+            << " irrigation_system_id=" << irrigation_system_id
+            << " day_of_week_index=" << day_of_week_index
+            << " water_time_=" << water_time_military
+            << " water_duration_ms=" << water_duration_ms;
+  try
+  {
+    session_->startTransaction();
+    mysqlx::Table table = db_->getTable(DAILY_IRRIGATION_SCHEDULES_TABLE);
+
+    const mysqlx::Result result = table
+        .insert(
+              "irrigation_system_id",
+              "day_of_week_index",
+              "water_time_military",
+              "water_duration_ms")
+        .values(
+              irrigation_system_id,
+              day_of_week_index,
+              water_time_military,
+              water_duration_ms)
+        .execute();
+
+    if (result.getAffectedItemsCount() == 0)
+    {
+      LOG(ERROR) << "Failed to insert daily irrigation system record";
+      goto error;
+    }
+
+    size_t schedule_id = result.getAutoIncrementValue();
+    LOG(INFO) << "Daily irrigation schedule " << schedule_id << " inserted successfully";
+    session_->commit();
+    return true;
+  }
+  catch (const mysqlx::Error e)
+  {
+    LOG(ERROR) << e;
+    goto error;
+  }
+
+error:
+    LOG(ERROR) << "Transaction failure when inserting daily irrigation "
+               << "schedule. Rolling back...";
+    session_->rollback();
+    return false;
 }
 
 void DbManager::CloseResources()

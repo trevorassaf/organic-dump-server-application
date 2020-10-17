@@ -26,6 +26,7 @@ public:
   bool ContainsRpi(const std::string &name);
   bool ContainsPeripheral(const std::string &name);
   bool ContainsPeripheral(size_t id);
+  bool ContainsIrrigationSystem(size_t id);
   bool InsertRpi(
       const std::string &name,
       const std::string &location,
@@ -42,6 +43,14 @@ public:
   bool UpdatePeripheralOwnership(
       size_t peripheral_id,
       size_t rpi_id);
+  bool InsertIrrigationSystem(
+      const std::string& name,
+      size_t *out_id);
+  bool InsertDailyIrrigationSchedule(
+      size_t irrigation_system_id,
+      size_t day_of_week_index,
+      std::string water_time_military,
+      size_t water_duration_ms);
 
 private:
   void CloseResources();

@@ -1,5 +1,6 @@
 #include "ControlClientHandler.h"
 
+#include <cassert>
 #include <memory>
 #include <unordered_map>
 
@@ -82,6 +83,15 @@ bool ControlClientHandler::Handle(
       return UpdatePeripheralOwnership(msg.update_peripheral_ownership, client);
     case MessageType::SEND_SOIL_MOISTURE_MEASUREMENT:
       return StoreSoilMoistureMeasurement(msg.send_soil_moisture_measurement, client);
+    case MessageType::REGISTER_IRRIGATION_SYSTEM:
+      return RegisterIrrigationSystem(msg.register_irrigation_system, client);
+    case MessageType::SET_IRRIGATION_SCHEDULE:
+      return SetIrrigationSchedule(msg.set_irrigation_schedule, client);
+    case MessageType::UNSCHEDULED_IRRIGATION_REQUEST:
+      return HandleUnscheduledIrrigationRequest(
+            msg.unscheduled_irrigation_request,
+            client,
+            all_clients);
     default:
       LOG(ERROR) << "Received unexpected message from Control Client: " << MessageType_Name(msg.type);
       return false;
@@ -269,6 +279,87 @@ bool ControlClientHandler::SendSuccessfulBasicResponse(ProtobufClient *client)
     return false;
   }
 
+  return true;
+}
+
+bool ControlClientHandler::RegisterIrrigationSystem(
+    const organicdump_proto::RegisterIrrigationSystem &msg,
+    ProtobufClient *client)
+{
+  assert(client);
+
+  if (msg.meta().has_rpi_id() && !db_.ContainsRpi(msg.meta().rpi_id())) {
+    LOG(ERROR) << "RPI does not exist. ID: " << msg.meta().rpi_id();
+    return false;
+  }
+
+  if (db_.ContainsPeripheral(msg.meta().name())) {
+    LOG(ERROR) << "Peripheral already exists with name: " << msg.meta().name();
+    return false;
+  }
+
+  size_t id;
+  if (!db_.InsertIrrigationSystem(
+          msg.meta().name(),
+          &id)) {
+    LOG(ERROR) << "Failed to insert irrigation system";
+    return false;
+  }
+
+  LOG(INFO) << "Registered irrigaion system with ID: " << id;
+
+  if (!SendSuccessfulBasicResponse(id, client))
+  {
+    LOG(ERROR) << "Failed to send successful response to client.";
+    return false;
+  }
+
+  return true;
+}
+
+bool ControlClientHandler::SetIrrigationSchedule(
+    const organicdump_proto::SetIrrigationSchedule &msg,
+    ProtobufClient *client)
+{
+  assert(client);
+
+  if (!db_.ContainsIrrigationSystem(msg.irrigation_system_id())) {
+    LOG(ERROR) << "Failed to set irrigation schedule since irrigation system with id "
+               << msg.irrigation_system_id() << " does not exist.";
+    return false;
+  }
+
+  for (const auto& entry : msg.daily_schedules()) {
+    if (!db_.InsertDailyIrrigationSchedule(
+            msg.irrigation_system_id(),
+            entry.day_of_week_index(),
+            entry.water_time_military(),
+            entry.water_duration_ms()))
+    {
+      LOG(ERROR) << "Failed to insert daily irrigation schedule";
+      return false;
+    }
+  }
+
+  LOG(INFO) << "Successfully inserted daily irrigation schedule for irrigation system "
+            << msg.irrigation_system_id();
+  return true;
+}
+
+bool ControlClientHandler::HandleUnscheduledIrrigationRequest(
+    const organicdump_proto::UnscheduledIrrigationRequest &msg,
+    ProtobufClient *client,
+    std::unordered_map<int, ProtobufClient> *all_clients)
+{
+  assert(client);
+  assert(all_clients);
+
+  LOG(INFO) << "Handling unscheduled irrigation request:"
+            << " irrigation_system_id=" << msg.irrigation_system_id()
+            << ", water_duration_ms=" << msg.duration_ms();
+
+  UNUSED(msg);
+  LOG(ERROR) << "bozkurtus -- HandleUnscheduledIrrigationRequest() -- UNIMPLEMENTED";
   return true;
 }
 
