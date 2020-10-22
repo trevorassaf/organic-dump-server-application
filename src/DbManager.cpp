@@ -485,8 +485,8 @@ bool DbManager::InsertDailyIrrigationSchedule(
         .insert(
               "irrigation_system_id",
               "day_of_week_index",
-              "water_time_military",
-              "water_duration_ms")
+              "irrigation_time_military",
+              "duration_ms")
         .values(
               irrigation_system_id,
               day_of_week_index,
@@ -496,7 +496,10 @@ bool DbManager::InsertDailyIrrigationSchedule(
 
     if (result.getAffectedItemsCount() == 0)
     {
-      LOG(ERROR) << "Failed to insert daily irrigation system record";
+      LOG(ERROR) << "Failed to insert daily irrigation system record. irrigation_system_id="
+                 << irrigation_system_id << ", day_of_week_index=" << day_of_week_index
+                 << ", water_time_military=" << water_time_military << ", water_duration_ms="
+                 << water_duration_ms;
       goto error;
     }
 

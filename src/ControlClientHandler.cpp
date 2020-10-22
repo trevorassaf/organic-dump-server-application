@@ -323,7 +323,7 @@ bool ControlClientHandler::SetIrrigationSchedule(
 {
   assert(client);
 
-  if (!db_.ContainsIrrigationSystem(msg.irrigation_system_id())) {
+  if (!db_.ContainsPeripheral(msg.irrigation_system_id())) {
     LOG(ERROR) << "Failed to set irrigation schedule since irrigation system with id "
                << msg.irrigation_system_id() << " does not exist.";
     return false;
