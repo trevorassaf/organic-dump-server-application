@@ -91,7 +91,7 @@ Server::Server(
     std::unordered_map<organicdump_proto::ClientType,
                        std::unique_ptr<ClientHandler>> handlers)
   : tls_server_{std::move(tls_server)},
-    clients_{},
+    fd_to_client_map_{},
     handlers_{std::move(handlers)}
 {}
 
@@ -109,7 +109,7 @@ bool Server::Run()
      int max_fd = tls_server_.GetFd().Get();
      FD_SET(max_fd, &read_fds);
 
-     for (auto &entry : clients_)
+     for (auto &entry : fd_to_client_map_)
      {
 
        if (entry.first > max_fd)
@@ -159,7 +159,7 @@ bool Server::Run()
 void Server::KickAllClients()
 {
   LOG(ERROR) << "Kicking all clients and removing handlers";
-  clients_.clear();
+  fd_to_client_map_.clear();
   handlers_.clear();
 }
 
@@ -176,8 +176,8 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
     else
     {
         LOG(INFO) << "Accepted new connection. Creating undifferented protobuf client";
-        assert(clients_.count(cxn.GetFd().Get()) == 0);
-        clients_.emplace(cxn.GetFd().Get(), std::move(cxn));
+        assert(fd_to_client_map_.count(cxn.GetFd().Get()) == 0);
+        fd_to_client_map_.emplace(cxn.GetFd().Get(), std::move(cxn));
     }
   }
 
@@ -186,7 +186,7 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
     if (FD_ISSET(fd, readable_fds) && fd != tls_server_.GetFd().Get()) {
       LOG(INFO) << "Socket fd " << fd << " is readable";
 
-      if (clients_.count(fd) == 0) {
+      if (fd_to_client_map_.count(fd) == 0) {
         LOG(INFO) << "Fd " << fd << " marked as readable but client not found. "
                   << "Assume it was kicked in previous operation.";
         continue;
@@ -195,7 +195,7 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
       LOG(INFO) << "Found client for socket fd " << fd;
 
       // Read and handle message
-      ProtobufClient *client = &clients_.at(fd);
+      ProtobufClient *client = &fd_to_client_map_.at(fd);
       OrganicDumpProtoMessage msg;
       bool cxn_closed = false;
 
@@ -208,7 +208,7 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
           LOG(ERROR) << "Failed to read protobuf message. Kicking connection.";
         }
         client = nullptr;
-        clients_.erase(fd);
+        fd_to_client_map_.erase(fd);
         continue;
       }
 
@@ -226,9 +226,9 @@ bool Server::ProcessReadableSockets(fd_set *readable_fds, int max_fd)
       assert(handlers_.count(client->GetType()) == 1);
 
       ClientHandler *handler = handlers_.at(client->GetType()).get();
-      if (!handler->Handle(msg, client, &clients_)) {
+      if (!handler->Handle(msg, client, &fd_to_client_map_)) {
         LOG(ERROR) << "Failed to handle protobuf message. Kicking client.";
-        clients_.erase(fd);
+        fd_to_client_map_.erase(fd);
       }
 
       LOG(INFO) << "Protobuf message handled successfully";
@@ -243,7 +243,7 @@ void Server::StealResources(Server *other)
     assert(other);
 
     tls_server_ = std::move(other->tls_server_);
-    clients_ = std::move(other->clients_);
+    fd_to_client_map_ = std::move(other->fd_to_client_map_);
     handlers_ = std::move(other->handlers_);
 }
 

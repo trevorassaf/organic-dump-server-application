@@ -44,7 +44,7 @@ private:
 
 private:
   network::TlsServer tls_server_;
-  std::unordered_map<int, ProtobufClient> clients_;
+  std::unordered_map<int, ProtobufClient> fd_to_client_map_;
   std::unordered_map<organicdump_proto::ClientType,
                      std::unique_ptr<ClientHandler>> handlers_;
 };
